@@ -1,1 +1,1 @@
-Instalar las dependencias con npm install -y
+Instalar las dependencias con npm init
