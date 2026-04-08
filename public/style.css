@@ -1,0 +1,115 @@
+/* Diseño Minimalista para Sockets */
+:root {
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --text: #212529;
+    --muted: #6c757d;
+    --accent: #007bff;
+    --border: #dee2e6;
+    --shadow: 0 2px 4px rgba(0,0,0,0.1);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); line-height: 1.5; }
+
+#login-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+}
+
+.login-card {
+    background: var(--card); border-radius: 8px; padding: 2rem;
+    box-shadow: var(--shadow); max-width: 400px; width: 90%;
+    text-align: center;
+}
+
+.login-card h2 { margin-bottom: 1rem; color: var(--accent); }
+.login-card input {
+    width: 100%; padding: 0.75rem; border: 1px solid var(--border);
+    border-radius: 4px; margin-bottom: 1rem;
+}
+
+.btn-principal {
+    background: var(--accent); color: white; border: none;
+    padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-principal:hover { background: #0056b3; }
+
+#main-content { display: none; max-width: 1200px; margin: 0 auto; padding: 2rem; }
+
+header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);
+}
+
+header h1 { color: var(--accent); }
+#user-info { color: var(--muted); }
+
+.badge-sala {
+    background: var(--accent); color: white; padding: 0.25rem 0.75rem;
+    border-radius: 12px; font-size: 0.8rem;
+}
+
+.grid-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+
+.card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.5rem; box-shadow: var(--shadow);
+}
+
+.card h2 { margin-bottom: 1rem; color: var(--accent); }
+
+label { display: block; margin-bottom: 0.5rem; color: var(--muted); }
+
+select, input[type="text"] {
+    width: 100%; padding: 0.5rem; border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.opcion-btn {
+    width: 100%; padding: 1rem; margin-bottom: 0.5rem;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--card); cursor: pointer; text-align: left;
+}
+
+.opcion-btn:hover { background: #f8f9fa; }
+
+.barra-votos {
+    width: 100%; height: 8px; background: var(--border);
+    border-radius: 4px; margin-top: 0.5rem;
+}
+
+.barra-progreso { height: 100%; background: var(--accent); border-radius: 4px; }
+
+#chat-mensajes {
+    height: 300px; overflow-y: auto; padding: 1rem;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--card); margin-bottom: 1rem;
+}
+
+#chat-mensajes div { margin-bottom: 0.5rem; padding: 0.5rem; background: #f8f9fa; border-radius: 4px; }
+
+.juego-area { display: grid; gap: 1rem; }
+
+.game-btn {
+    padding: 1rem; border: 1px solid var(--border); border-radius: 4px;
+    background: var(--card); cursor: pointer; text-align: center;
+}
+
+.game-btn:hover:not(:disabled) { background: #f8f9fa; }
+.game-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.reaccion-animada {
+    position: fixed; top: 20%; font-size: 2rem;
+    animation: fade 2s forwards;
+}
+
+@keyframes fade { to { opacity: 0; transform: translateY(-50px); } }
+
+@media (max-width: 768px) {
+    .grid-layout { grid-template-columns: 1fr; }
+    header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+}
