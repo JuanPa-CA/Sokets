@@ -3,78 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sockets</title>
+    <title>Sokets App</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="login-overlay">
         <div class="login-card">
-            <h2>Bienvenido</h2>
-            <input type="text" id="nickname-input" placeholder="Tu apodo...">
-            <br>
-            <button id="login-btn" class="btn-principal">Entrar</button>
+            <h2>Acceso</h2>
+            <input type="text" id="nickname-input" placeholder="Nombre de usuario...">
+            <button id="login-btn" class="btn-principal">Ingresar</button>
         </div>
     </div>
 
-    <!-- App Principal -->
     <div id="main-content">
         <header>
-            <h1>Sockets</h1>
-            <div id="user-info">Hola, <b id="display-nickname"></b> | Sala: <span id="nombre-sala-badge" class="badge-sala">programacion</span></div>
+            <h1>Sokets</h1>
+            <div id="user-info">
+                Usuario: <b id="display-nickname"></b> | 
+                Sala: <span id="nombre-sala-badge" class="badge-sala">programacion</span>
+                <button id="logout-btn" class="btn-logout">Salir</button>
+            </div>
         </header>
 
         <div class="grid-layout">
-            <!-- Columna Izquierda: Encuesta -->
-            <div>
+            <div class="col-left">
                 <div class="card">
-                    <div style="margin-bottom: 15px;">
-                        <label>Cambiar Sala:</label>
+                    <div class="sala-selector">
+                        <label>Sala:</label>
                         <select id="sala-select">
-                            <option value="programacion">Programación</option>
+                            <option value="programacion">Programacion</option>
                             <option value="videojuegos">Videojuegos</option>
                             <option value="deportes">Deportes</option>
                         </select>
                     </div>
-                    <h2 id="pregunta">Cargando encuesta...</h2>
+                    <h2 id="pregunta">Cargando...</h2>
                     <div id="opciones-container"></div>
-                    <div style="margin-top: 15px;">Usuarios en sala: <b id="usuarios-conteo">0</b></div>
+                    <div class="conteo-container">
+                        Usuarios en sala: <b id="usuarios-conteo">0</b>
+                    </div>
                 </div>
 
                 <div class="card">
-                    <h2>Reacciones Rápidas</h2>
-                    <div style="font-size: 1.5rem; cursor: pointer; display: flex; gap: 10px;">
+                    <h2>Reacciones</h2>
+                    <div class="reacciones-flex">
                         <span onclick="enviarReaccion('🔥')">🔥</span>
                         <span onclick="enviarReaccion('❤️')">❤️</span>
                         <span onclick="enviarReaccion('👍')">👍</span>
                         <span onclick="enviarReaccion('🚀')">🚀</span>
                         <span onclick="enviarReaccion('😂')">😂</span>
+                        <span onclick="enviarReaccion('💯')">💯</span>
+                        <span onclick="enviarReaccion('⭐')">⭐</span>
+                        <span onclick="enviarReaccion('🎉')">🎉</span>
+                        <span onclick="enviarReaccion('🤯')">🤯</span>
+                        <span onclick="enviarReaccion('🤔')">🤔</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Columna Derecha: Chat y Juego -->
-            <div>
+            <div class="col-right">
                 <div class="card">
-                    <h2>Chat de Sala</h2>
+                    <h2>Chat</h2>
                     <div id="chat-mensajes"></div>
-                    <div style="display: flex; gap: 5px;">
-                        <input type="text" id="mensaje-input" style="flex-grow: 1; padding: 8px;" placeholder="Escribe...">
-                        <button id="enviar-btn" class="btn-principal" style="background: #2196f3;">Enviar</button>
+                    <div class="chat-input-group">
+                        <input type="text" id="mensaje-input" placeholder="Mensaje...">
+                        <button id="enviar-btn" class="btn-principal">Enviar</button>
                     </div>
                 </div>
 
                 <div class="card">
-                    <h2>Piedra, Papel, Tijeras (1v1)</h2>
-                    <div id="juego-container" class="juego-area">
+                    <h2>Juego (1v1)</h2>
+                    <div id="juego-container">
                         <button id="buscar-partida-btn" class="btn-principal">Buscar Partida</button>
                         <div id="estado-busqueda"></div>
                         
                         <div id="area-juego" style="display: none;">
-                            <p>Oponente: <b id="nombre-oponente"></b></p>
-                            <div>
-                                <button class="game-btn" onclick="elegir('Piedra')">✊</button>
-                                <button class="game-btn" onclick="elegir('Papel')">✋</button>
-                                <button class="game-btn" onclick="elegir('Tijeras')">✌️</button>
+                            <p>Contra: <b id="nombre-oponente"></b></p>
+                            <div class="game-buttons">
+                                <button class="game-btn" onclick="elegir('Piedra')">Piedra</button>
+                                <button class="game-btn" onclick="elegir('Papel')">Papel</button>
+                                <button class="game-btn" onclick="elegir('Tijeras')">Tijeras</button>
                             </div>
                             <div id="espera-oponente"></div>
                         </div>
@@ -88,111 +95,157 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const qs = selector => document.querySelector(selector);
+        const qs = s => document.querySelector(s);
 
         let salaActual = 'programacion';
-        let partidaIdActual = null;
         let miNickname = '';
+        let partidaIdActual = null;
+        let yaVoteEnEstaSala = false;
 
-        const loginOverlay = qs('#login-overlay');
-        const mainContent = qs('#main-content');
-        const nicknameInput = qs('#nickname-input');
-        const displayNickname = qs('#display-nickname');
-        const salaBadge = qs('#nombre-sala-badge');
-        const salaSelect = qs('#sala-select');
-        const chatMensajes = qs('#chat-mensajes');
-        const mensajeInput = qs('#mensaje-input');
-        const enviarBtn = qs('#enviar-btn');
-        const opcionesContainer = qs('#opciones-container');
-        const preguntaTitulo = qs('#pregunta');
-        const usuariosConteo = qs('#usuarios-conteo');
-        const buscarBtn = qs('#buscar-partida-btn');
-        const estadoBusqueda = qs('#estado-busqueda');
-        const areaJuego = qs('#area-juego');
-        const resultadoJuego = qs('#resultado-juego');
-        const nombreOponente = qs('#nombre-oponente');
-        const esperaOponente = qs('#espera-oponente');
+        // --- DOM ELEMENTS ---
+        const elements = {
+            loginOverlay: qs('#login-overlay'),
+            mainContent: qs('#main-content'),
+            nickInput: qs('#nickname-input'),
+            loginBtn: qs('#login-btn'),
+            logoutBtn: qs('#logout-btn'),
+            displayNick: qs('#display-nickname'),
+            salaBadge: qs('#nombre-sala-badge'),
+            salaSelect: qs('#sala-select'),
+            chatBox: qs('#chat-mensajes'),
+            msgInput: qs('#mensaje-input'),
+            sendBtn: qs('#enviar-btn'),
+            pregunta: qs('#pregunta'),
+            opciones: qs('#opciones-container'),
+            conteo: qs('#usuarios-conteo'),
+            buscarBtn: qs('#buscar-partida-btn'),
+            estadoBusq: qs('#estado-busqueda'),
+            areaJuego: qs('#area-juego'),
+            oponente: qs('#nombre-oponente'),
+            espera: qs('#espera-oponente'),
+            resultado: qs('#resultado-juego')
+        };
 
-        const guardarNickname = nick => localStorage.setItem('socket_nickname', nick);
+        // --- SESSION PERSISTENCE ---
+        const savedNick = localStorage.getItem('sokets_nick');
+        if (savedNick) {
+            socket.emit('auth:login', savedNick);
+        }
 
-        // Restaurar sesión si ya había un apodo guardado
-        window.addEventListener('load', () => {
-            const savedNick = localStorage.getItem('socket_nickname');
-            if (savedNick) socket.emit('auth:login', savedNick);
-        });
+        // Evitar recarga accidental
+        window.onbeforeunload = (e) => {
+            if (miNickname) {
+                const msg = "Es posible que los cambios no se guarden.";
+                e.preventDefault();
+                e.returnValue = msg;
+                return msg;
+            }
+        };
 
-        window.addEventListener('beforeunload', e => {
-            e.preventDefault();
-            e.returnValue = '¿Estás seguro de que quieres salir? Se perderá la conexión actual.';
-        });
+        // --- AUTH ---
+        elements.loginBtn.onclick = () => {
+            const nick = elements.nickInput.value.trim();
+            if (nick) {
+                socket.emit('auth:login', nick);
+            }
+        };
 
-        qs('#login-btn').addEventListener('click', () => {
-            const nick = nicknameInput.value.trim();
-            if (nick) socket.emit('auth:login', nick);
-        });
+        elements.nickInput.onkeypress = e => { if (e.key === 'Enter') elements.loginBtn.click(); };
+
+        elements.logoutBtn.onclick = () => {
+            localStorage.removeItem('sokets_nick');
+            location.reload(); // La forma más limpia de resetear todo el estado
+        };
 
         socket.on('auth:success', ({ nickname }) => {
             miNickname = nickname;
-            guardarNickname(miNickname);
-            displayNickname.textContent = miNickname;
-            loginOverlay.style.display = 'none';
-            mainContent.style.display = 'block';
+            localStorage.setItem('sokets_nick', nickname);
+            elements.displayNick.textContent = nickname;
+            elements.loginOverlay.style.display = 'none';
+            elements.mainContent.style.display = 'block';
             socket.emit('sala:unirse', salaActual);
         });
 
-        salaSelect.addEventListener('change', e => {
+        socket.on('auth:error', msg => alert(msg));
+
+        // --- SALAS ---
+        elements.salaSelect.onchange = e => {
             salaActual = e.target.value;
-            salaBadge.textContent = salaActual;
-            chatMensajes.innerHTML = '';
+            elements.salaBadge.textContent = salaActual;
+            elements.chatBox.innerHTML = '';
+            yaVoteEnEstaSala = false; // Se reseteará con el evento encuesta:estado
             socket.emit('sala:unirse', salaActual);
+        };
+
+        socket.on('usuarios:conteo', count => {
+            elements.conteo.textContent = count;
         });
 
-        const renderizarEncuesta = data => {
-            preguntaTitulo.textContent = data.pregunta;
-            opcionesContainer.innerHTML = '';
-            const total = Object.values(data.opciones).reduce((sum, value) => sum + value, 0);
+        // --- ENCUESTA ---
+        const renderEncuesta = (data) => {
+            elements.pregunta.textContent = data.pregunta;
+            elements.opciones.innerHTML = '';
+            
+            // Actualizar estado local si el servidor lo indica o si nosotros fuimos los últimos
+            if (data.hasVoted !== undefined) yaVoteEnEstaSala = data.hasVoted;
+            if (data.lastVoter === miNickname) yaVoteEnEstaSala = true;
 
-            Object.entries(data.opciones).forEach(([opcion, votos]) => {
-                const porcentaje = total === 0 ? 0 : Math.round((votos / total) * 100);
-                const boton = document.createElement('button');
-                boton.className = 'opcion-btn';
-                boton.innerHTML = `
-                    <b>${opcion}</b> (${votos})
-                    <div class="barra-votos"><div class="barra-progreso" style="width: ${porcentaje}%"></div></div>`;
-                boton.onclick = () => socket.emit('encuesta:votar', { sala: salaActual, opcion });
-                opcionesContainer.appendChild(boton);
+            const total = Object.values(data.opciones).reduce((a, b) => a + b, 0);
+
+            Object.entries(data.opciones).forEach(([opt, votos]) => {
+                const pc = total ? Math.round((votos / total) * 100) : 0;
+                
+                if (yaVoteEnEstaSala) {
+                    // Mostrar resultados
+                    const div = document.createElement('div');
+                    div.className = 'resultado-voto';
+                    div.innerHTML = `
+                        <div class="voto-info">
+                            <span>${opt}</span>
+                            <span>${votos} (${pc}%)</span>
+                        </div>
+                        <div class="barra-votos"><div class="barra-progreso" style="width:${pc}%"></div></div>
+                    `;
+                    elements.opciones.appendChild(div);
+                } else {
+                    // Mostrar botones para votar
+                    const btn = document.createElement('button');
+                    btn.className = 'opcion-btn';
+                    btn.textContent = opt;
+                    btn.onclick = () => socket.emit('encuesta:votar', { sala: salaActual, opcion: opt });
+                    elements.opciones.appendChild(btn);
+                }
             });
         };
 
-        socket.on('encuesta:estado', renderizarEncuesta);
-        socket.on('encuesta:resultado', renderizarEncuesta);
+        socket.on('encuesta:estado', renderEncuesta);
+        socket.on('encuesta:resultado', renderEncuesta);
+        socket.on('encuesta:error', msg => alert(msg));
 
-        const agregarMensaje = ({ usuario, texto, fecha }) => {
-            chatMensajes.insertAdjacentHTML('beforeend', `<div><strong>${usuario}</strong><span style="color: var(--muted); font-size: .85rem; margin-left: 8px;">${fecha || ''}</span><br>${texto}</div>`);
-            chatMensajes.scrollTop = chatMensajes.scrollHeight;
+        // --- CHAT ---
+        const addMsg = ({ usuario, texto, fecha }) => {
+            const div = document.createElement('div');
+            div.className = 'msg-item';
+            div.innerHTML = `<strong>${usuario}</strong> <small>${fecha}</small><br>${texto}`;
+            elements.chatBox.appendChild(div);
+            elements.chatBox.scrollTop = elements.chatBox.scrollHeight;
         };
 
-        const renderChatHistory = mensajes => {
-            chatMensajes.innerHTML = '';
-            mensajes.forEach(agregarMensaje);
+        elements.sendBtn.onclick = () => {
+            const texto = elements.msgInput.value.trim();
+            if (texto) {
+                socket.emit('chat:mensaje', { sala: salaActual, texto });
+                elements.msgInput.value = '';
+            }
         };
 
-        socket.on('chat:historial', renderChatHistory);
+        elements.msgInput.onkeypress = e => { if (e.key === 'Enter') elements.sendBtn.click(); };
 
-        const enviarMensaje = () => {
-            const texto = mensajeInput.value.trim();
-            if (!texto) return;
-            socket.emit('chat:mensaje', { sala: salaActual, texto });
-            mensajeInput.value = '';
-        };
+        socket.on('chat:mensaje', addMsg);
+        socket.on('chat:historial', history => history.forEach(addMsg));
 
-        enviarBtn.addEventListener('click', enviarMensaje);
-        mensajeInput.addEventListener('keypress', e => { if (e.key === 'Enter') enviarMensaje(); });
-
-        socket.on('chat:mensaje', agregarMensaje);
-
-        const enviarReaccion = emoji => socket.emit('reaccion:enviar', { sala: salaActual, emoji });
-        window.enviarReaccion = enviarReaccion;
+        // --- REACCIONES ---
+        window.enviarReaccion = emoji => socket.emit('reaccion:enviar', { sala: salaActual, emoji });
 
         socket.on('reaccion:mostrar', emoji => {
             const el = document.createElement('div');
@@ -203,63 +256,72 @@
             setTimeout(() => el.remove(), 2000);
         });
 
-        buscarBtn.addEventListener('click', () => {
+        // --- JUEGO ---
+        elements.buscarBtn.onclick = () => {
             socket.emit('juego:buscar');
-            buscarBtn.disabled = true;
-            estadoBusqueda.textContent = 'Buscando oponente...';
-            resultadoJuego.textContent = '';
-        });
+            elements.buscarBtn.disabled = true;
+            elements.estadoBusq.textContent = 'Buscando...';
+            elements.resultado.innerHTML = '';
+        };
 
-        socket.on('juego:esperando', msg => { estadoBusqueda.textContent = msg; });
+        socket.on('juego:esperando', msg => elements.estadoBusq.textContent = msg);
 
         socket.on('juego:inicio', data => {
             partidaIdActual = data.partidaId;
-            const opponent = data.oponente1 === miNickname ? data.oponente2 : data.oponente1;
-
-            buscarBtn.style.display = 'none';
-            areaJuego.style.display = 'block';
-            estadoBusqueda.textContent = '¡Partida encontrada!';
-            nombreOponente.textContent = opponent;
-            esperaOponente.textContent = '';
-            document.querySelectorAll('.game-btn').forEach(btn => btn.disabled = false);
+            const opp = data.oponente1 === miNickname ? data.oponente2 : data.oponente1;
+            elements.buscarBtn.style.display = 'none';
+            elements.areaJuego.style.display = 'block';
+            elements.oponente.textContent = opp;
+            elements.espera.textContent = '';
+            elements.estadoBusq.textContent = 'Partida en curso';
+            document.querySelectorAll('.game-btn').forEach(b => b.disabled = false);
         });
 
-        const elegir = eleccion => {
-            if (!partidaIdActual) return;
-            socket.emit('juego:eleccion', { partidaId: partidaIdActual, eleccion });
-            document.querySelectorAll('.game-btn').forEach(btn => btn.disabled = true);
+        window.elegir = move => {
+            socket.emit('juego:eleccion', { partidaId: partidaIdActual, eleccion: move });
+            document.querySelectorAll('.game-btn').forEach(b => b.disabled = true);
         };
-        window.elegir = elegir;
 
-        socket.on('juego:esperando_oponente', msg => { esperaOponente.textContent = msg; });
+        socket.on('juego:esperando_oponente', msg => elements.espera.textContent = msg);
 
-        socket.on('juego:resultado', data => {
-            const { ganador, elecciones } = data;
-            let mensaje = '';
+        socket.on('juego:resultado', ({ ganador, elecciones }) => {
+            let resClase = '';
+            let resTexto = '';
+            
+            const misEleccion = elecciones[miNickname];
+            const oponenteNick = Object.keys(elecciones).find(n => n !== miNickname);
+            const oponenteEleccion = elecciones[oponenteNick];
 
             if (ganador === 'Empate') {
-                mensaje = `¡Empate! Ambos eligieron ${Object.values(elecciones)[0]}`;
+                resTexto = '¡EMPATE!';
+                resClase = 'res-empate';
             } else if (ganador === miNickname) {
-                const oponenteSeleccion = Object.entries(elecciones).find(([nick]) => nick !== miNickname)[1];
-                mensaje = `¡GANASTE! Tu oponente eligió ${oponenteSeleccion}`;
+                resTexto = '¡GANASTE!';
+                resClase = 'res-ganaste';
             } else {
-                mensaje = `Perdiste... Tu oponente eligió ${elecciones[ganador]}`;
+                resTexto = 'PERDISTE...';
+                resClase = 'res-perdiste';
             }
-
-            resultadoJuego.textContent = mensaje;
-
+            
+            elements.resultado.innerHTML = `
+                <div class="final-res ${resClase}">
+                    <h3>${resTexto}</h3>
+                    <div class="res-detalle">
+                        <span>Tú: <b>${misEleccion}</b></span>
+                        <span>Oponente: <b>${oponenteEleccion}</b></span>
+                    </div>
+                </div>
+            `;
+            
             setTimeout(() => {
                 partidaIdActual = null;
-                areaJuego.style.display = 'none';
-                buscarBtn.style.display = 'inline-block';
-                buscarBtn.disabled = false;
-                estadoBusqueda.textContent = '';
+                elements.areaJuego.style.display = 'none';
+                elements.buscarBtn.style.display = 'inline-block';
+                elements.buscarBtn.disabled = false;
+                elements.estadoBusq.textContent = '';
+                elements.resultado.innerHTML = ''; // Limpiar el resultado visual
             }, 5000);
         });
-
-        socket.on('usuarios:conteo', count => { usuariosConteo.textContent = count; });
-        socket.on('auth:error', msg => alert(msg));
-        socket.on('encuesta:error', msg => alert(msg));
     </script>
 </body>
 </html>

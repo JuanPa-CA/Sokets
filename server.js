@@ -7,12 +7,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Conexión a MongoDB
+// --- CONFIGURACION Y DB ---
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/sockets_db';
+const PORT = process.env.PORT || 3002;
 
 mongoose.connect(MONGO_URI)
-    .then(() => console.log('Conectado a MongoDB'))
-    .catch(err => console.error('Error conectando a MongoDB:', err));
+    .then(() => console.log('DB: Conectada'))
+    .catch(err => console.error('DB: Error', err));
 
 // --- MODELOS ---
 const userSchema = new mongoose.Schema({
@@ -30,192 +31,165 @@ const votoSchema = new mongoose.Schema({
 });
 const Voto = mongoose.model('Voto', votoSchema);
 
-// --- DATOS EN MEMORIA (Cache para velocidad) ---
+// --- ESTADO GLOBAL ---
 const encuestas = {
     'programacion': {
-        pregunta: '¿Cuál es su lenguaje de programación favorito?',
-        opciones: { 'JavaScript': 0, 'Python': 0, 'Java': 0, 'C#': 0, 'PHP': 0 },
+        pregunta: 'Lenguaje favorito',
+        opciones: { 'JavaScript': 0, 'Python': 0, 'Java': 0, 'C#': 0 },
         votosRegistrados: new Set()
     },
     'videojuegos': {
-        pregunta: '¿Cuál es tu juego favorito?',
-        opciones: { 'Minecraft': 0, 'Fortnite': 0, 'Call of Duty': 0, 'League of Legends': 0 },
+        pregunta: 'Juego favorito',
+        opciones: { 'Minecraft': 0, 'Fortnite': 0, 'Roblox': 0 },
         votosRegistrados: new Set()
     },
     'deportes': {
-        pregunta: '¿Cuál es tu deporte favorito?',
-        opciones: { 'Fútbol': 0, 'Baloncesto': 0, 'Tenis': 0, 'Béisbol': 0 },
+        pregunta: 'Deporte favorito',
+        opciones: { 'Futbol': 0, 'Basquet': 0, 'Tenis': 0 },
         votosRegistrados: new Set()
     }
 };
 
-const chatHistorial = {
-    'programacion': [],
-    'comida': [],
-    'deportes': []
-};
-
-// --- ESTADO DEL JUEGO ---
+const chatHistorial = {};
 let colaEspera = [];
 let partidas = {};
 
-function calcularResultado(j1, j2) {
-    if (j1.eleccion === j2.eleccion) return 'Empate';
-    const reglas = {
-        'Piedra': 'Tijeras',
-        'Papel': 'Piedra',
-        'Tijeras': 'Papel'
-    };
-    if (reglas[j1.eleccion] === j2.eleccion) return j1.nickname;
-    return j2.nickname;
-}
-
-// Sincronizar memoria con MongoDB al arrancar
+// --- UTILIDADES ---
 async function sincronizarMemoria() {
     try {
         const votos = await Voto.find();
         votos.forEach(v => {
-            if (encuestas[v.sala]) {
+            if (encuestas[v.sala] && encuestas[v.sala].opciones[v.opcion] !== undefined) {
                 encuestas[v.sala].opciones[v.opcion]++;
                 encuestas[v.sala].votosRegistrados.add(v.nickname);
             }
         });
-        console.log(`Sincronizados ${votos.length} votos desde MongoDB`);
+        console.log(`Sync: ${votos.length} votos`);
     } catch (err) {
-        console.error('Error al sincronizar memoria:', err);
+        console.error('Sync Error:', err);
     }
 }
-sincronizarMemoria();
 
+function updateRoomCount(sala) {
+    if (!sala) return;
+    const count = io.sockets.adapter.rooms.get(sala)?.size || 0;
+    io.to(sala).emit('usuarios:conteo', count);
+}
+
+function calcularGanadorJuego(j1, j2) {
+    if (j1.eleccion === j2.eleccion) return 'Empate';
+    const reglas = { 'Piedra': 'Tijeras', 'Papel': 'Piedra', 'Tijeras': 'Papel' };
+    return reglas[j1.eleccion] === j2.eleccion ? j1.nickname : j2.nickname;
+}
+
+// --- SERVIDOR ---
+sincronizarMemoria();
 app.use(express.static('public'));
 
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/public/index.html');
-});
-
 io.on('connection', (socket) => {
-    console.log('Nuevo intento de conexión:', socket.id);
+    let currentRoom = null;
 
-    // --- AUTENTICACIÓN ---
+    // Autenticacion
     socket.on('auth:login', async (nickname) => {
         try {
-            let user = await User.findOneAndUpdate(
+            await User.findOneAndUpdate(
                 { nickname },
                 { socketId: socket.id, lastLogin: Date.now() },
-                { upsert: true, new: true }
+                { upsert: true }
             );
-
             socket.nickname = nickname;
-            socket.emit('auth:success', { nickname: user.nickname });
-            console.log(`Usuario autenticado: ${nickname}`);
+            socket.emit('auth:success', { nickname });
         } catch (err) {
-            socket.emit('auth:error', 'Error al iniciar sesión');
+            socket.emit('auth:error', 'Error al iniciar sesion');
         }
     });
 
-    // Unirse a una sala
+    // Gestion de Salas
     socket.on('sala:unirse', (sala) => {
-        if (!socket.nickname) return socket.emit('auth:error', 'Debes iniciar sesión primero');
-
-        socket.rooms.forEach(room => {
-            if (room !== socket.id) socket.leave(room);
-        });
+        if (!socket.nickname) return;
+        
+        if (currentRoom) {
+            socket.leave(currentRoom);
+            const prevRoom = currentRoom;
+            setTimeout(() => updateRoomCount(prevRoom), 100);
+        }
 
         if (encuestas[sala]) {
             socket.join(sala);
+            currentRoom = sala;
             
             socket.emit('encuesta:estado', {
                 pregunta: encuestas[sala].pregunta,
-                opciones: encuestas[sala].opciones
+                opciones: encuestas[sala].opciones,
+                hasVoted: encuestas[sala].votosRegistrados.has(socket.nickname)
             });
 
             socket.emit('chat:historial', chatHistorial[sala] || []);
-            
-            const clientesEnSala = io.sockets.adapter.rooms.get(sala)?.size || 0;
-            io.to(sala).emit('usuarios:conteo', clientesEnSala);
+            updateRoomCount(sala);
         }
     });
 
-    // Votar
-    socket.on('encuesta:votar', async (data) => {
-        if (!socket.nickname) return;
-
-        const { sala, opcion } = data;
+    // Encuesta
+    socket.on('encuesta:votar', async ({ sala, opcion }) => {
         const encuesta = encuestas[sala];
+        if (!encuesta || !socket.nickname || encuesta.votosRegistrados.has(socket.nickname)) {
+            return socket.emit('encuesta:error', 'Voto invalido o ya registrado');
+        }
 
-        if (encuesta) {
-            if (encuesta.votosRegistrados.has(socket.nickname)) {
-                socket.emit('encuesta:error', '¡Ya votaste en esta encuesta!');
-                return;
-            }
-
-            if (encuesta.opciones[opcion] !== undefined) {
-                try {
-                    const nuevoVoto = new Voto({ sala, opcion, nickname: socket.nickname });
-                    await nuevoVoto.save();
-
-                    encuesta.opciones[opcion]++;
-                    encuesta.votosRegistrados.add(socket.nickname);
-
-                    io.to(sala).emit('encuesta:resultado', {
-                        pregunta: encuesta.pregunta,
-                        opciones: encuesta.opciones
-                    });
-                } catch (err) {
-                    console.error('Error al guardar voto:', err);
-                }
+        if (encuesta.opciones[opcion] !== undefined) {
+            try {
+                await new Voto({ sala, opcion, nickname: socket.nickname }).save();
+                encuesta.opciones[opcion]++;
+                encuesta.votosRegistrados.add(socket.nickname);
+                
+                // Notificar a todos los de la sala el nuevo resultado
+                // Pero cada cliente decide si mostrar el botón o la barra basado en su propio estado local o emitido
+                io.to(sala).emit('encuesta:resultado', {
+                    pregunta: encuesta.pregunta,
+                    opciones: encuesta.opciones,
+                    lastVoter: socket.nickname // Útil para que el que votó sepa que fue él
+                });
+            } catch (err) {
+                console.error('Voto Error:', err);
             }
         }
     });
 
     // Chat
-    socket.on('chat:mensaje', (data) => {
-        if (!socket.nickname) return;
-        const { sala, texto } = data;
-        const mensaje = {
+    socket.on('chat:mensaje', ({ sala, texto }) => {
+        if (!socket.nickname || !texto.trim()) return;
+        const msg = {
             usuario: socket.nickname,
-            texto: texto,
+            texto: texto.trim(),
             fecha: new Date().toLocaleTimeString()
         };
-
         chatHistorial[sala] = chatHistorial[sala] || [];
-        chatHistorial[sala].push(mensaje);
+        chatHistorial[sala].push(msg);
         if (chatHistorial[sala].length > 50) chatHistorial[sala].shift();
-
-        io.to(sala).emit('chat:mensaje', mensaje);
+        io.to(sala).emit('chat:mensaje', msg);
     });
 
     // Reacciones
-    socket.on('reaccion:enviar', (data) => {
-        if (!socket.nickname) return;
-        const { sala, emoji } = data;
-        io.to(sala).emit('reaccion:mostrar', emoji);
+    socket.on('reaccion:enviar', ({ sala, emoji }) => {
+        if (socket.nickname) io.to(sala).emit('reaccion:mostrar', emoji);
     });
 
-    // --- JUEGO: PIEDRA, PAPEL, TIJERAS ---
+    // Juego
     socket.on('juego:buscar', () => {
-        if (!socket.nickname) return;
-
-        if (colaEspera.find(s => s.id === socket.id)) return;
-
+        if (!socket.nickname || colaEspera.some(s => s.id === socket.id)) return;
         colaEspera.push(socket);
-        console.log(`Usuario ${socket.nickname} buscando partida...`);
-
         if (colaEspera.length >= 2) {
             const p1 = colaEspera.shift();
             const p2 = colaEspera.shift();
-            const partidaId = `game_${Date.now()}_${p1.id}_${p2.id}`;
-
+            const partidaId = `game_${Date.now()}`;
             p1.join(partidaId);
             p2.join(partidaId);
-
             partidas[partidaId] = {
                 jugadores: [
                     { id: p1.id, nickname: p1.nickname, eleccion: null },
                     { id: p2.id, nickname: p2.nickname, eleccion: null }
                 ]
             };
-
             io.to(partidaId).emit('juego:inicio', {
                 partidaId,
                 oponente1: p1.nickname,
@@ -226,53 +200,58 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('juego:eleccion', (data) => {
-        const { partidaId, eleccion } = data;
+    socket.on('juego:eleccion', ({ partidaId, eleccion }) => {
         const partida = partidas[partidaId];
-
-        if (partida) {
-            const jugador = partida.jugadores.find(j => j.id === socket.id);
-            if (jugador && !jugador.eleccion) {
-                jugador.eleccion = eleccion;
-
-                if (partida.jugadores.every(j => j.eleccion)) {
-                    const [j1, j2] = partida.jugadores;
-                    const resultado = calcularResultado(j1, j2);
-
-                    io.to(partidaId).emit('juego:resultado', {
-                        elecciones: {
-                            [j1.nickname]: j1.eleccion,
-                            [j2.nickname]: j2.eleccion
-                        },
-                        ganador: resultado
-                    });
-
-                    setTimeout(() => {
-                        delete partidas[partidaId];
-                    }, 5000);
-                } else {
-                    socket.emit('juego:esperando_oponente', 'Esperando a que el oponente elija...');
-                }
+        if (!partida) return;
+        const j = partida.jugadores.find(p => p.id === socket.id);
+        if (j && !j.eleccion) {
+            j.eleccion = eleccion;
+            if (partida.jugadores.every(p => p.eleccion)) {
+                const [j1, j2] = partida.jugadores;
+                const ganador = calcularGanadorJuego(j1, j2);
+                io.to(partidaId).emit('juego:resultado', {
+                    elecciones: { [j1.nickname]: j1.eleccion, [j2.nickname]: j2.eleccion },
+                    ganador
+                });
+                setTimeout(() => delete partidas[partidaId], 5000);
+            } else {
+                socket.emit('juego:esperando_oponente', 'Esperando eleccion oponente...');
             }
         }
     });
 
+    // Desconexion
     socket.on('disconnecting', () => {
         colaEspera = colaEspera.filter(s => s.id !== socket.id);
-        socket.rooms.forEach(sala => {
-            if (sala !== socket.id) {
-                const clientesEnSala = (io.sockets.adapter.rooms.get(sala)?.size || 1) - 1;
-                io.to(sala).emit('usuarios:conteo', clientesEnSala);
+        socket.rooms.forEach(room => {
+            if (room !== socket.id) {
+                setTimeout(() => updateRoomCount(room), 100);
             }
         });
     });
-
-    socket.on('disconnect', () => {
-        console.log('Usuario desconectado:', socket.id);
-    });
 });
 
-const PORT = 3002;
-server.listen(PORT, () => {
-    console.log(`Servidor corriendo en http://localhost:${PORT}`);
-});
+// --- REINICIO AUTOMÁTICO DE ENCUESTAS (Cada 24 horas) ---
+setInterval(async () => {
+    try {
+        await Voto.deleteMany({}); // Limpiar DB
+        for (const sala in encuestas) {
+            for (const opcion in encuestas[sala].opciones) {
+                encuestas[sala].opciones[opcion] = 0;
+            }
+            encuestas[sala].votosRegistrados.clear();
+            
+            // Notificar a todos en la sala del reinicio
+            io.to(sala).emit('encuesta:estado', {
+                pregunta: encuestas[sala].pregunta,
+                opciones: encuestas[sala].opciones,
+                hasVoted: false
+            });
+        }
+        console.log('Encuestas: Reiniciadas por cron (24 horas)');
+    } catch (err) {
+        console.error('Error cron reinicio:', err);
+    }
+}, 86400000); // 24 * 60 * 60 * 1000 ms
+
+server.listen(PORT, () => console.log(`Run: http://localhost:${PORT}`));
